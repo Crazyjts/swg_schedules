@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SWG Event Schedules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0e1a;
+    color: #e2e8f0;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+</style>
+</head>
+<body>
+<div id="root" style="width:100%; max-width:1100px;"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+'use strict';
+var e = React.createElement;
+var useState = React.useState, useEffect = React.useEffect;
+
+var INVASION_SCHEDULE = [
+  { name: "Dearic Invasion",  gmt: "01:00" },
+  { name: "Keren Invasion",   gmt: "03:00" },
+  { name: "Bestine Invasion", gmt: "05:00" },
+  { name: "Dearic Invasion",  gmt: "07:00" },
+  { name: "Keren Invasion",   gmt: "09:00" },
+  { name: "Bestine Invasion", gmt: "11:00" },
+  { name: "Dearic Invasion",  gmt: "13:00" },
+  { name: "Keren Invasion",   gmt: "15:00" },
+  { name: "Bestine Invasion", gmt: "17:00" },
+  { name: "Dearic Invasion",  gmt: "19:00" },
+  { name: "Keren Invasion",   gmt: "21:00" },
+  { name: "Bestine Invasion", gmt: "23:00" },
+];
+
+var SPACE_SCHEDULE = [
+  { name: "Naboo Space (PvE)",     gmt: "00:00" },
+  { name: "Lok Space (PvP)",       gmt: "02:00" },
+  { name: "Tatooine Space (PvE)",  gmt: "04:00" },
+  { name: "Dantooine Space (PvP)", gmt: "06:00" },
+  { name: "Corellia Space (PvE)",  gmt: "08:00" },
+  { name: "Lok Space (PvP)",       gmt: "10:00" },
+  { name: "Naboo Space (PvE)",     gmt: "12:00" },
+  { name: "Dantooine Space (PvP)", gmt: "14:00" },
+  { name: "Corellia Space (PvE)",  gmt: "16:00" },
+  { name: "Tatooine Space (PvE)",  gmt: "18:00" },
+  { name: "Lok Space (PvP)",       gmt: "20:00" },
+  { name: "Dantooine Space (PvP)", gmt: "22:00" },
+];
+
+var TYPE_COLORS = {
+  ground: { bg: "#1a2e1a", border: "#2d5a2d", accent: "#4ade80", headerBg: "#1f3d1f" },
+  space:  { bg: "#1a1a2e", border: "#2d2d5a", accent: "#60a5fa", headerBg: "#1f1f3d" },
+};
+
+function gmtToLocal(gmtStr) {
+  var parts = gmtStr.split(":");
+  var h = parseInt(parts[0]), m = parseInt(parts[1]);
+  var offsetMin = new Date().getTimezoneOffset();
+  var totalMin = h * 60 + m - offsetMin;
+  totalMin = ((totalMin % 1440) + 1440) % 1440;
+  return String(Math.floor(totalMin / 60)).padStart(2, "0") + ":" + String(totalMin % 60).padStart(2, "0");
+}
+
+function getTzName() {
+  try {
+    var p = new Intl.DateTimeFormat("en", { timeZoneName: "short" }).formatToParts(new Date());
+    var tz = p.find(function(x) { return x.type === "timeZoneName"; });
+    return tz ? tz.value : "Local";
+  } catch(ex) { return "Local"; }
+}
+
+function getLiveNext(data) {
+  var now = new Date();
+  var gmtNow = now.getUTCHours() * 60 + now.getUTCMinutes();
+  var liveIdx = -1, nextIdx = -1;
+  for (var i = 0; i < data.length; i++) {
+    var parts = data[i].gmt.split(":");
+    var start = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    if (gmtNow >= start && gmtNow < start + 60) { liveIdx = i; break; }
+  }
+  if (liveIdx === -1) {
+    for (var j = 0; j < data.length; j++) {
+      var pts = data[j].gmt.split(":");
+      if (parseInt(pts[0]) * 60 + parseInt(pts[1]) > gmtNow) { nextIdx = j; break; }
+    }
+    if (nextIdx === -1) nextIdx = 0;
+  } else {
+    nextIdx = (liveIdx + 1) % data.length;
+  }
+  return { liveIdx: liveIdx, nextIdx: nextIdx };
+}
+
+function SchedulePanel(props) {
+  var type = props.type;
+  var data = props.data;
+  var title = props.title;
+  var colLabel = props.colLabel;
+  var icon = props.icon;
+  var tc = TYPE_COLORS[type];
+  var tzName = getTzName();
+  var ln = getLiveNext(data);
+  var liveIdx = ln.liveIdx;
+  var nextIdx = ln.nextIdx;
+  var gmtTime = new Date().toLocaleTimeString("en-GB", { timeZone: "GMT", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  return e("div", {
+    style: {
+      background: "linear-gradient(180deg, " + tc.headerBg + " 0%, #0a0e17 100%)",
+      border: "1px solid " + tc.accent + "44",
+      borderRadius: 14,
+      width: "100%", flex: "1 1 460px",
+      boxShadow: "0 20px 60px rgba(0,0,0,0.8), 0 0 40px " + tc.accent + "11",
+      overflow: "hidden",
+    }
+  },
+    // Header
+    e("div", {
+      style: {
+        padding: "16px 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        borderBottom: "1px solid " + tc.accent + "33",
+        background: tc.headerBg,
+      }
+    },
+      e("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+        e("span", { style: { fontSize: 22 } }, icon),
+        e("div", null,
+          e("div", { style: { fontFamily: "'Orbitron', sans-serif", fontSize: 18, fontWeight: 700, color: tc.accent, letterSpacing: 2 } }, title),
+          e("div", { style: { fontFamily: "'Rajdhani', sans-serif", fontSize: 14, fontWeight: 600, color: "#94a3b8", letterSpacing: 1, marginTop: 2 } }, gmtTime + " GMT")
+        )
+      )
+    ),
+    // Table
+    e("div", { style: { overflowX: "auto", padding: "12px 16px 16px" } },
+      e("table", { style: { width: "100%", flex: "1 1 460px", borderCollapse: "collapse", fontSize: 13, fontFamily: "'Rajdhani', sans-serif" } },
+        e("thead", null,
+          e("tr", null,
+            e("th", { style: { padding: "8px 10px", textAlign: "left", color: tc.accent, fontWeight: 700, fontSize: 13, letterSpacing: 1, borderBottom: "2px solid " + tc.accent + "33", whiteSpace: "nowrap", fontFamily: "'Orbitron', sans-serif" } }, colLabel),
+            e("th", { style: { padding: "8px 8px", textAlign: "center", color: "#e2e8f0", fontWeight: 600, fontSize: 13, letterSpacing: 1, borderBottom: "2px solid " + tc.accent + "33", whiteSpace: "nowrap", fontFamily: "'Orbitron', sans-serif" } }, "GMT"),
+            e("th", { style: { padding: "8px 8px", textAlign: "center", color: "#e2e8f0", fontWeight: 600, fontSize: 13, letterSpacing: 1, borderBottom: "2px solid " + tc.accent + "33", whiteSpace: "nowrap", fontFamily: "'Orbitron', sans-serif" } }, tzName)
+          )
+        ),
+        e("tbody", null,
+          data.map(function(row, i) {
+            var isLive = i === liveIdx;
+            var isNext = i === nextIdx && liveIdx === -1;
+            var highlighted = isLive || isNext;
+            var hlColor = isLive ? tc.accent : "#f59e0b";
+            return e("tr", {
+              key: i,
+              style: {
+                background: highlighted ? hlColor + "22" : (i % 2 === 0 ? "transparent" : tc.accent + "08"),
+                borderLeft: highlighted ? "3px solid " + hlColor : "3px solid transparent",
+              }
+            },
+              e("td", { style: { padding: "7px 10px", color: highlighted ? hlColor : "#f8fafc", fontWeight: highlighted ? 700 : 600, whiteSpace: "nowrap", borderBottom: "1px solid " + tc.border + "44", fontSize: 16 } },
+                isLive ? "🔴 " : (isNext ? "⏭ " : ""),
+                row.name,
+                isLive ? e("span", { style: { fontSize: 10, color: tc.accent, fontWeight: 700, letterSpacing: 1, marginLeft: 6, fontFamily: "'Orbitron', sans-serif" } }, "LIVE") : null,
+                isNext ? e("span", { style: { fontSize: 10, color: "#f59e0b", fontWeight: 700, letterSpacing: 1, marginLeft: 6, fontFamily: "'Orbitron', sans-serif" } }, "NEXT") : null
+              ),
+              e("td", { style: { padding: "7px 8px", textAlign: "center", color: highlighted ? "#f8fafc" : "#e2e8f0", borderBottom: "1px solid " + tc.border + "44", fontFamily: "'Rajdhani', sans-serif", fontSize: 16, fontWeight: highlighted ? 700 : 600 } }, row.gmt),
+              e("td", { style: { padding: "7px 8px", textAlign: "center", color: highlighted ? "#f8fafc" : "#e2e8f0", borderBottom: "1px solid " + tc.border + "44", fontFamily: "'Rajdhani', sans-serif", fontSize: 16, fontWeight: highlighted ? 700 : 600 } }, gmtToLocal(row.gmt))
+            );
+          })
+        )
+      )
+    )
+  );
+}
+
+function App() {
+  var tick = useState(0);
+  var setTick = tick[1];
+
+  useEffect(function() {
+    var id = setInterval(function() { setTick(function(n) { return n + 1; }); }, 1000);
+    return function() { clearInterval(id); };
+  }, []);
+
+  return e("div", { style: { display: "flex", flexDirection: "row", gap: 16, width: "100%", flex: "1 1 460px", flexWrap: "wrap" } },
+    e(SchedulePanel, { type: "ground", data: INVASION_SCHEDULE, title: "Invasion Schedule", colLabel: "INVASION", icon: "⚔️" }),
+    e(SchedulePanel, { type: "space",  data: SPACE_SCHEDULE,    title: "Space Battle Schedule", colLabel: "BATTLE", icon: "🚀" })
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+</script>
+</body>
+</html>
